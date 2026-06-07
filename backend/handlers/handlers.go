@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"kura-safi/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 func GetVoterProfile(c *gin.Context) {
@@ -36,12 +37,21 @@ func GetElection(c *gin.Context) {
 
 func GetAdminStats(c *gin.Context) {
 	var voterCount, candidateCount int64
-	models.DB.Model(&models.User{}).Where("role = ?", "voter").Count(&voterCount)
-	models.DB.Model(&models.User{}).Where("role = ?", "candidate").Count(&candidateCount)
+	models.DB.Model(&models.User{}).Where("role LIKE ?", "%voter%").Count(&voterCount)
+	models.DB.Model(&models.User{}).Where("role LIKE ?", "%candidate%").Count(&candidateCount)
 	c.JSON(http.StatusOK, gin.H{
 		"voters":     voterCount,
 		"candidates": candidateCount,
 	})
+}
+
+func GetAdminCandidates(c *gin.Context) {
+	var candidates []models.User
+	if err := models.DB.Where("role LIKE ?", "%candidate%").Find(&candidates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load candidates"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"candidates": candidates})
 }
 
 func UploadCandidatePhoto(c *gin.Context) {

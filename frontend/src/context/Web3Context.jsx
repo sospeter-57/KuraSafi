@@ -26,8 +26,12 @@ export function Web3Provider({ children }) {
       await _provider.send("eth_requestAccounts", []);
       const _signer = await _provider.getSigner();
       const _account = await _signer.getAddress();
+      const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS || contractConfig.contractAddress;
+      if (!contractAddress || contractAddress === "0x0000000000000000000000000000000000000000") {
+        throw new Error("Contract address is not configured. Set VITE_CONTRACT_ADDRESS in frontend/.env.local.");
+      }
       const _contract = new ethers.Contract(
-        contractConfig.contractAddress,
+        contractAddress,
         KuraSafiABI,
         _signer
       );

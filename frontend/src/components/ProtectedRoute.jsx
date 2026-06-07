@@ -14,7 +14,13 @@ export default function ProtectedRoute({ children, role }) {
   }
 
   if (!user) return <Navigate to="/" replace />;
-  if (role && user.role !== role) return <Navigate to={`/${user.role}/dashboard`} replace />;
+  if (role) {
+    const roles = user.role?.split(",").map((r) => r.trim()) || [];
+    if (!roles.includes(role)) {
+      const primaryRole = roles[0] || user.role;
+      return <Navigate to={`/${primaryRole}/dashboard`} replace />;
+    }
+  }
 
   return children;
 }

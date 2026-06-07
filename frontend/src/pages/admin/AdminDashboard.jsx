@@ -6,12 +6,11 @@ import Navbar from "../../components/Navbar";
 import CountdownTimer from "../../components/CountdownTimer";
 
 export default function AdminDashboard() {
-  const { contract } = useWeb3();
+  const { contract, isConnected } = useWeb3();
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [contractElections, setContractElections] = useState([]);
-  const [localElections, setLocalElections] = useState([]);
   const [loadingElections, setLoadingElections] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", startTime: "", endTime: "" });
   const [creating, setCreating] = useState(false);
@@ -24,16 +23,22 @@ export default function AdminDashboard() {
       const count = Number(await contract.electionCount());
       const list = [];
       for (let i = 1; i <= count; i++) {
-        const e = await contract.getElection(i);
-        list.push({
-          id: Number(e.id),
-          title: e.title,
-          description: e.description,
-          startTime: Number(e.startTime),
-          endTime: Number(e.endTime),
-          active: e.active,
-          onChain: true,
-        });
+        try {
+          const e = await contract.getElection(i);
+          if (!e || !e.exists) continue;
+          list.push({
+            id: Number(e.id),
+            title: e.title,
+            description: e.description,
+            startTime: Number(e.startTime),
+            endTime: Number(e.endTime),
+            active: e.active,
+            onChain: true,
+          });
+        } catch (err) {
+          console.warn(`Skipping invalid election ${i}:`, err);
+          continue;
+        }
       }
       setContractElections(list);
     } catch (err) {
@@ -45,7 +50,7 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchElections(); }, [contract]);
 
-  const elections = [...contractElections, ...localElections];
+  const elections = contractElections;
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -54,53 +59,34 @@ export default function AdminDashboard() {
     const start = Math.floor(new Date(form.startTime).getTime() / 1000);
     const end = Math.floor(new Date(form.endTime).getTime() / 1000);
 
-    if (contract) {
-      try {
-        const tx = await contract.createElection(form.title, form.description, start, end);
-        await tx.wait();
-        setMsg({ type: "success", text: "Election created on-chain!" });
-        setForm({ title: "", description: "", startTime: "", endTime: "" });
-        fetchElections();
-      } catch (err) {
-        setMsg({ type: "error", text: err.reason || err.message || "Transaction failed" });
-      } finally {
-        setCreating(false);
-      }
+    if (!contract || !isConnected) {
+      setMsg({ type: "error", text: "Connect your wallet before creating an election." });
+      setCreating(false);
       return;
     }
 
-    const localId = Date.now();
-    setLocalElections((prev) => [
-      ...prev,
-      {
-        id: localId,
-        title: form.title,
-        description: form.description,
-        startTime: Number(start),
-        endTime: Number(end),
-        active: true,
-        onChain: false,
-      },
-    ]);
-    setMsg({ type: "success", text: "Election created locally. Connect wallet to publish on-chain." });
-    setForm({ title: "", description: "", startTime: "", endTime: "" });
-    setCreating(false);
+    try {
+      const tx = await contract.createElection(form.title, form.description, start, end);
+      await tx.wait();
+      setMsg({ type: "success", text: "Election created on-chain!" });
+      setForm({ title: "", description: "", startTime: "", endTime: "" });
+      fetchElections();
+    } catch (err) {
+      setMsg({ type: "error", text: err.reason || err.message || "Transaction failed" });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleEnd = async (id, onChain) => {
-    if (onChain) {
-      if (!contract) return;
-      try {
-        const tx = await contract.endElection(id);
-        await tx.wait();
-        fetchElections();
-      } catch (err) {
-        alert(err.reason || err.message);
-      }
-      return;
+    if (!contract) return;
+    try {
+      const tx = await contract.endElection(id);
+      await tx.wait();
+      fetchElections();
+    } catch (err) {
+      alert(err.reason || err.message);
     }
-
-    setLocalElections((prev) => prev.map((el) => (el.id === id ? { ...el, active: false } : el)));
   };
 
   return (

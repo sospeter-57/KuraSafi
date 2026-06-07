@@ -1,2 +1,8 @@
 contracts/node_modules/
+frontend/.env.local
+frontend/node_modules/
+backend/uploads/
+backend/kura_safi.db
 
+
+contracts/cache/

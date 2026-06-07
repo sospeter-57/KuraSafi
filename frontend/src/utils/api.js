@@ -22,6 +22,7 @@ export const registerCandidate = (data) => api.post("/auth/register/candidate", 
 
 // Admin
 export const getAdminStats = () => api.get("/admin/stats");
+export const getAdminCandidates = () => api.get("/admin/candidates");
 export const uploadCandidatePhoto = (formData) =>
   api.post("/admin/upload-photo", formData, { headers: { "Content-Type": "multipart/form-data" } });
 

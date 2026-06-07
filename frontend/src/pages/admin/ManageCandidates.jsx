@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useWeb3 } from "../../context/Web3Context";
 import Navbar from "../../components/Navbar";
-import { uploadCandidatePhoto } from "../../utils/api";
+import { getAdminCandidates, uploadCandidatePhoto } from "../../utils/api";
 
 export default function ManageCandidates() {
   const { electionId } = useParams();
@@ -11,25 +11,47 @@ export default function ManageCandidates() {
 
   const [election, setElection] = useState(null);
   const [candidates, setCandidates] = useState([]);
-  const [form, setForm] = useState({ name: "", party: "", photoFile: null, photoPreview: null });
+  const [registeredCandidates, setRegisteredCandidates] = useState([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [form, setForm] = useState({ photoFile: null, photoPreview: null });
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState({ type: "", text: "" });
 
   const fetchData = async () => {
-    if (!contract) return;
+    if (contract) {
+      try {
+        const el = await contract.getElection(electionId);
+        setElection({ title: el.title, description: el.description, active: el.active });
+      } catch (err) {
+        console.error("Failed to fetch election", err);
+      }
+
+      try {
+        const cands = await contract.getElectionCandidates(electionId);
+        setCandidates(cands.map((c) => ({
+          id: Number(c.id),
+          name: c.name,
+          party: c.party,
+          photoHash: c.photoHash,
+          voteCount: Number(c.voteCount),
+        })));
+      } catch (err) {
+        console.error("Failed to fetch election candidates", err);
+        setCandidates([]);
+      }
+    }
+
     try {
-      const el = await contract.getElection(electionId);
-      setElection({ title: el.title, description: el.description, active: el.active });
-      const cands = await contract.getElectionCandidates(electionId);
-      setCandidates(cands.map((c) => ({
-        id: Number(c.id),
-        name: c.name,
-        party: c.party,
-        photoHash: c.photoHash,
-        voteCount: Number(c.voteCount),
+      const res = await getAdminCandidates();
+      setRegisteredCandidates((res.data.candidates || []).map((c) => ({
+        id: c.id ?? c.ID,
+        fullName: c.fullName ?? c.FullName,
+        party: c.party ?? c.Party,
+        photoUrl: c.photoUrl ?? c.PhotoURL,
       })));
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load registered candidates", err);
+      setRegisteredCandidates([]);
     }
   };
 
@@ -44,21 +66,28 @@ export default function ManageCandidates() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!contract) return setMsg({ type: "error", text: "Connect wallet first" });
+
+    const selected = registeredCandidates.find((c) => String(c.id) === String(selectedCandidateId));
+    if (!selected) {
+      return setMsg({ type: "error", text: "Select a registered candidate ID to add." });
+    }
+
     setAdding(true);
     setMsg({ type: "", text: "" });
     try {
-      let photoHash = "";
+      let photoHash = selected.photoUrl || "";
       if (form.photoFile) {
         const fd = new FormData();
         fd.append("photo", form.photoFile);
         fd.append("electionId", electionId);
         const res = await uploadCandidatePhoto(fd);
-        photoHash = res.data.url || "";
+        photoHash = res.data.url || photoHash;
       }
-      const tx = await contract.addCandidate(electionId, form.name, form.party, photoHash);
+      const tx = await contract.addCandidate(electionId, selected.fullName, selected.party, photoHash);
       await tx.wait();
-      setMsg({ type: "success", text: `${form.name} added as candidate!` });
-      setForm({ name: "", party: "", photoFile: null, photoPreview: null });
+      setMsg({ type: "success", text: `${selected.fullName} added as candidate!` });
+      setForm({ photoFile: null, photoPreview: null });
+      setSelectedCandidateId("");
       fetchData();
     } catch (err) {
       setMsg({ type: "error", text: err.reason || err.message || "Failed to add candidate" });
@@ -112,13 +141,34 @@ export default function ManageCandidates() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-muted uppercase tracking-widest font-mono block mb-2">Full Name</label>
-                  <input className="input-base" placeholder="Candidate full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                  <label className="text-xs text-muted uppercase tracking-widest font-mono block mb-2">Registered Candidate</label>
+                  <select
+                    className="input-base"
+                    value={selectedCandidateId}
+                    onChange={(e) => setSelectedCandidateId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled hidden>Select candidate ID</option>
+                    {registeredCandidates.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        #{c.id}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div>
-                  <label className="text-xs text-muted uppercase tracking-widest font-mono block mb-2">Party / Affiliation</label>
-                  <input className="input-base" placeholder="Party name or Independent" value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} required />
-                </div>
+
+                {selectedCandidateId && (
+                  <div className="card border-border p-4 bg-surface">
+                    <p className="text-xs text-muted uppercase tracking-widest font-mono mb-2">Selected Candidate</p>
+                    <p className="font-display font-bold text-white">
+                      {registeredCandidates.find((c) => String(c.id) === String(selectedCandidateId))?.fullName}
+                    </p>
+                    <p className="text-muted text-xs">
+                      {registeredCandidates.find((c) => String(c.id) === String(selectedCandidateId))?.party}
+                    </p>
+                    <p className="text-muted text-xs mt-2">Candidate ID: #{selectedCandidateId}</p>
+                  </div>
+                )}
 
                 <button type="submit" disabled={adding || !isConnected} className="btn-primary w-full disabled:opacity-50">
                   {adding ? "Adding on-chain..." : "Add Candidate"}

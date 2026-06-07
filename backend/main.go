@@ -53,6 +53,7 @@ func main() {
 			admin.Use(middleware.RoleMiddleware("admin"))
 			{
 				admin.GET("/stats", handlers.GetAdminStats)
+				admin.GET("/candidates", handlers.GetAdminCandidates)
 				admin.POST("/upload-photo", handlers.UploadCandidatePhoto)
 			}
 		}
