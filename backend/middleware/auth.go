@@ -54,7 +54,8 @@ func AuthMiddleware() gin.HandlerFunc {
 func RoleMiddleware(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, _ := c.Get("role")
-		if userRole != role {
+		userRoleStr, ok := userRole.(string)
+		if !ok || !strings.Contains(userRoleStr, role) {
 			c.JSON(http.StatusForbidden, gin.H{"message": "Access denied"})
 			c.Abort()
 			return

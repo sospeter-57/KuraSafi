@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"kura-safi/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"kura-safi/models"
 )
 
 type LoginInput struct {
@@ -42,7 +43,12 @@ func Login(c *gin.Context) {
 	}
 
 	var user models.User
-	query := models.DB.Where("national_id = ? AND role = ?", id, input.Role)
+	query := models.DB.Where("national_id = ?", id)
+	if input.Role == "admin" {
+		query = query.Where("role = ?", input.Role)
+	} else {
+		query = query.Where("role LIKE ?", "%"+input.Role+"%")
+	}
 	if err := query.First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "User not found"})
 		return
@@ -112,14 +118,32 @@ func RegisterCandidate(c *gin.Context) {
 	}
 
 	var existing models.User
-	if models.DB.Where("national_id = ?", input.NationalID).First(&existing).Error == nil {
-		c.JSON(http.StatusConflict, gin.H{"message": "National ID already registered"})
+	err := models.DB.Where("national_id = ?", input.NationalID).First(&existing).Error
+	if err == nil {
+		if strings.Contains(existing.Role, "candidate") {
+			c.JSON(http.StatusConflict, gin.H{"message": "National ID already registered as candidate"})
+			return
+		}
+		existing.Role = "candidate,voter"
+		existing.Party = input.Party
+		existing.WalletAddress = input.WalletAddress
+		existing.BiometricHash = input.BiometricHash
+		if err := models.DB.Save(&existing).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Candidate promotion failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Candidate promoted to candidate and voter successfully"})
+		return
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "record not found") {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Registration failed"})
 		return
 	}
 
 	user := models.User{
 		FullName: input.FullName, NationalID: input.NationalID,
-		WalletAddress: input.WalletAddress, Role: "candidate",
+		WalletAddress: input.WalletAddress, Role: "candidate,voter",
 		Party: input.Party, BiometricHash: input.BiometricHash,
 	}
 	if err := models.DB.Create(&user).Error; err != nil {

@@ -39,6 +39,7 @@ contract KuraSafi {
     event VoteCast(uint indexed electionId, uint indexed candidateId);
     event VoterRegistered(address indexed voter, string kenyanId);
     event ElectionEnded(uint indexed electionId);
+    event ElectionDeleted(uint indexed electionId);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin can perform this action");
@@ -172,6 +173,13 @@ contract KuraSafi {
     function endElection(uint _electionId) external onlyAdmin electionExists(_electionId) {
         elections[_electionId].active = false;
         emit ElectionEnded(_electionId);
+    }
+
+    function deleteElection(uint _electionId) external onlyAdmin electionExists(_electionId) {
+        require(block.timestamp > elections[_electionId].endTime, "Election timeout not reached");
+        elections[_electionId].active = false;
+        elections[_electionId].exists = false;
+        emit ElectionDeleted(_electionId);
     }
 
     function isElectionLive(uint _electionId) external view electionExists(_electionId) returns (bool) {

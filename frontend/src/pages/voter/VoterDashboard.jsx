@@ -47,11 +47,16 @@ export default function VoterDashboard() {
 
   useEffect(() => { fetchElections(); }, [contract]);
 
-  // If voter already voted, lock to tally
+  // If the voter has already voted in every live election, redirect to active tally.
   useEffect(() => {
-    const votedInAny = Object.values(hasVoted).some(Boolean);
-    const liveElection = elections.find((e) => e.live);
-    if (votedInAny && liveElection) navigate(`/tally/${liveElection.id}`);
+    const liveElections = elections.filter((e) => e.live);
+    if (liveElections.length === 0) return;
+
+    const liveElectionsNotVoted = liveElections.filter((e) => !hasVoted[e.id]);
+    if (liveElectionsNotVoted.length === 0) {
+      const votedElection = liveElections.find((e) => hasVoted[e.id]) || liveElections[0];
+      navigate(`/tally/${votedElection.id}`);
+    }
   }, [hasVoted, elections]);
 
   const selectElection = async (el) => {
@@ -100,7 +105,7 @@ export default function VoterDashboard() {
             <div className="grid gap-4">
               {elections.map((el) => (
                 <div key={el.id} className={`card transition-all ${el.live && !hasVoted[el.id] ? "border-accent border-opacity-40 hover:border-opacity-80 cursor-pointer" : "opacity-60"}`}
-                  onClick={() => selectElection(el)}>
+                  onClick={() => { if (el.live && !hasVoted[el.id]) selectElection(el); }}>
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="font-display font-bold text-xl mb-1">{el.title}</h3>
